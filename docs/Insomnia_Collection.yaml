@@ -1,0 +1,1135 @@
+type: collection.insomnia.rest/5.0
+name: API Olli Pet - Clyvo Challenge
+meta:
+  id: wrk_ollipet_clyvo
+  created: 1756000000000
+  modified: 1756600000000
+  description: >-
+    Colecao da API Olli Pet.
+
+    Fluxo de uso: rode "Login veterinario" e "Login tutor" primeiro e copie o campo
+    "token" de cada resposta para a variavel de ambiente correspondente. Todas as
+    demais requisicoes ja mandam o header Authorization.
+
+    O aplicativo mobile nao usa "Login": ele envia o ID token do Firebase no mesmo
+    header, e a API valida contra as chaves publicas do Google.
+
+    A pasta 2 percorre a corrente completa do sistema: triagem -> agendamento ->
+    atendimento -> prontuario -> tratamento -> adesao.
+
+environments:
+  name: Local
+  data:
+    base_url: http://localhost:8080/api/v1
+    token_vet: cole-aqui-o-token-do-login-veterinario
+    token_tutor: cole-aqui-o-token-do-login-tutor
+
+collection:
+  - name: 1. Autenticacao
+    meta:
+      id: fld_auth
+      sortKey: -1000
+    children:
+      - name: Login veterinario
+        meta:
+          id: req_login_vet
+          sortKey: -1000
+        method: POST
+        url: "{{ _.base_url }}/auth/login"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "email": "camila.duarte@ollipet.com",
+              "senha": "123456"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+
+      - name: Login tutor
+        meta:
+          id: req_login_tutor
+          sortKey: -900
+        method: POST
+        url: "{{ _.base_url }}/auth/login"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "email": "maria.silva@email.com",
+              "senha": "123456"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+
+      - name: Registrar conta do Firebase
+        meta:
+          id: req_registrar_firebase
+          sortKey: -800
+          description: >-
+            Chamado uma vez pelo app logo apos o cadastro no Firebase. O header
+            Authorization deve trazer o ID token do Firebase, nao o token da API.
+            Nome e e-mail sao lidos do proprio token. A chamada e idempotente.
+            Esta e a unica forma de criar um tutor: a API nao expoe cadastro.
+        method: POST
+        url: "{{ _.base_url }}/auth/registrar"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "cpf": "11122233344",
+              "dataNascimento": "1999-04-12"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer COLE_AQUI_O_ID_TOKEN_DO_FIREBASE
+
+  - name: 2. Corrente completa - triagem ate adesao
+    meta:
+      id: fld_corrente
+      sortKey: -900
+      description: >-
+        Rode em ordem. Ao final: consulta concluida, prontuario gravado sozinho, triagem
+        marcada como ENCAMINHADA e o tratamento com as doses no celular do tutor.
+    children:
+      - name: 2.1 Queixas disponiveis para o pet (tutor)
+        meta:
+          id: req_queixas
+          sortKey: -1000
+          description: Filtra o catalogo pela especie do pet. Primeira tela da triagem.
+        method: GET
+        url: "{{ _.base_url }}/triagem/queixas/pet/1"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: 2.2 Protocolo da queixa escolhida
+        meta:
+          id: req_protocolo
+          sortKey: -950
+          description: >-
+            Perguntas e opcoes para o app montar o formulario. Repare que peso e sinal
+            de alerta nao aparecem: a pontuacao e responsabilidade do servidor.
+        method: GET
+        url: "{{ _.base_url }}/triagem/protocolos/1"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: 2.3 Enviar respostas - quadro leve (espera ORIENTACAO)
+        meta:
+          id: req_triagem_leve
+          sortKey: -900
+        method: POST
+        url: "{{ _.base_url }}/triagem"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "queixaId": 1,
+              "respostas": [
+                { "perguntaId": 101, "opcaoId": 1011 },
+                { "perguntaId": 102, "opcaoId": 1021 },
+                { "perguntaId": 103, "opcaoId": 1031 },
+                { "perguntaId": 104, "opcaoId": 1041 },
+                { "perguntaId": 105, "opcaoId": 1051 },
+                { "perguntaId": 106, "opcaoId": 1061 },
+                { "perguntaId": 107, "opcaoId": 1071 }
+              ]
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: 2.4 Enviar respostas - quadro grave (espera URGENTE)
+        meta:
+          id: req_triagem_grave
+          sortKey: -880
+          description: 3 dias, mais de 5 episodios, sangue, nao bebe agua, animal quieto.
+        method: POST
+        url: "{{ _.base_url }}/triagem"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "queixaId": 1,
+              "respostas": [
+                { "perguntaId": 101, "opcaoId": 1013 },
+                { "perguntaId": 102, "opcaoId": 1023 },
+                { "perguntaId": 103, "opcaoId": 1032 },
+                { "perguntaId": 104, "opcaoId": 1043 },
+                { "perguntaId": 105, "opcaoId": 1051 },
+                { "perguntaId": 106, "opcaoId": 1062 },
+                { "perguntaId": 107, "opcaoId": 1071 }
+              ]
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: 2.5 Agendar a partir da triagem (use o id devolvido em 2.4)
+        meta:
+          id: req_agendar_da_triagem
+          sortKey: -850
+          description: >-
+            Ajuste triagemId, dataHora (dia util futuro entre 08:00 e 17:30) e cole em
+            motivo o campo motivoSugerido que a triagem devolveu. Triagem e consulta
+            nascem na mesma transacao.
+        method: POST
+        url: "{{ _.base_url }}/consultas"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "veterinarioId": 1,
+              "dataHora": "2026-09-15T14:30:00",
+              "motivo": "Vomito ou diarreia: 3 dias ou mais, Mais de 5 (triagem #2)",
+              "triagemId": 2
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: 2.6 Solicitacoes pendentes (vet)
+        meta:
+          id: req_pendentes
+          sortKey: -800
+        method: GET
+        url: "{{ _.base_url }}/agenda/pendentes"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: 2.7 Confirmar consulta (vet)
+        meta:
+          id: req_confirmar
+          sortKey: -700
+        method: PATCH
+        url: "{{ _.base_url }}/consultas/1/confirmar"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: 2.8 Iniciar atendimento (vet)
+        meta:
+          id: req_iniciar
+          sortKey: -600
+        method: PATCH
+        url: "{{ _.base_url }}/consultas/1/iniciar"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: 2.9 Concluir e gerar prontuario (vet)
+        meta:
+          id: req_concluir
+          sortKey: -500
+        method: PATCH
+        url: "{{ _.base_url }}/consultas/1/concluir"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "procedimento": "Consulta clinica com hidratacao",
+              "localAtendimento": "Clinica Clyvo - Unidade Paulista",
+              "observacoes": "Retorno em 15 dias"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: 2.10 Conferir o prontuario gerado sozinho
+        meta:
+          id: req_prontuario_gerado
+          sortKey: -400
+          description: O campo consultaId comprova que o prontuario nasceu do atendimento.
+        method: GET
+        url: "{{ _.base_url }}/prontuarios/pet/1"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: 2.11 Prescrever tratamento (vet)
+        meta:
+          id: req_prescrever
+          sortKey: -350
+          description: >-
+            Ajuste inicioEm para ONTEM 08:00 se quiser ver doses ja vencidas na resposta.
+            A API devolve 14 doses com data e hora — o cliente nao envia nenhuma delas.
+        method: POST
+        url: "{{ _.base_url }}/tratamentos"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "consultaId": 1,
+              "medicamento": "Amoxicilina 250mg",
+              "dosagem": "1 comprimido",
+              "intervaloHoras": 12,
+              "duracaoDias": 7,
+              "inicioEm": "2026-08-30T08:00:00",
+              "observacoes": "Dar junto com a comida"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: 2.12 Doses de hoje (tutor)
+        meta:
+          id: req_doses_hoje
+          sortKey: -300
+          description: >-
+            Checklist do dia somando todos os pets. Doses cujo horario passou da
+            tolerancia ja aparecem como PERDIDA, sem nenhuma rotina ter rodado.
+        method: GET
+        url: "{{ _.base_url }}/tratamentos/hoje"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: 2.13 Confirmar uma dose (tutor)
+        meta:
+          id: req_confirmar_dose
+          sortKey: -250
+          description: Use um doseId devolvido em 2.12. A adesao sobe na hora.
+        method: PATCH
+        url: "{{ _.base_url }}/tratamentos/doses/1/confirmar"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: 2.14 Adesao apurada do tratamento
+        meta:
+          id: req_aderencia
+          sortKey: -200
+          description: >-
+            aderenciaPercentual considera apenas as doses ja vencidas. As que ainda nem
+            chegaram ficam em dosesPendentes e nao punem o tutor.
+        method: GET
+        url: "{{ _.base_url }}/tratamentos/1"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: 2.15 Painel de adesao baixa (vet)
+        meta:
+          id: req_painel_aderencia
+          sortKey: -150
+          description: Quem esta deixando dose passar, para a clinica agir antes do retorno.
+        method: GET
+        url: "{{ _.base_url }}/tratamentos/aderencia-baixa"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: 2.16 Triagem de pele com tratamento em curso (fecha o ciclo)
+        meta:
+          id: req_triagem_com_tratamento
+          sortKey: -100
+          description: >-
+            Mesmas respostas em pet sem tratamento dao AGENDAR e observacoesClinicas
+            vazio. Aqui sai "avaliar possivel reacao adversa" e a acao vira
+            AGENDAR_RETORNO, porque a consulta foi concluida ha pouco.
+        method: POST
+        url: "{{ _.base_url }}/triagem"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "queixaId": 2,
+              "respostas": [
+                { "perguntaId": 201, "opcaoId": 2011 },
+                { "perguntaId": 202, "opcaoId": 2021 },
+                { "perguntaId": 203, "opcaoId": 2031 },
+                { "perguntaId": 204, "opcaoId": 2041 },
+                { "perguntaId": 205, "opcaoId": 2051 },
+                { "perguntaId": 206, "opcaoId": 2061 },
+                { "perguntaId": 207, "opcaoId": 2071 }
+              ]
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+  - name: 3. Triagem - outros casos
+    meta:
+      id: fld_triagem
+      sortKey: -850
+    children:
+      - name: Sinal de alerta vira EMERGENCIA com pontuacao baixa
+        meta:
+          id: req_triagem_emergencia
+          sortKey: -1000
+          description: >-
+            Todas as respostas leves, menos a opcao 1052 (barriga inchada e dura,
+            tentando vomitar sem sair nada). Um unico sinal de alerta sobrepoe a
+            pontuacao e a resposta vem com recomendaConsulta = false.
+        method: POST
+        url: "{{ _.base_url }}/triagem"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "queixaId": 1,
+              "respostas": [
+                { "perguntaId": 101, "opcaoId": 1011 },
+                { "perguntaId": 102, "opcaoId": 1021 },
+                { "perguntaId": 103, "opcaoId": 1031 },
+                { "perguntaId": 104, "opcaoId": 1041 },
+                { "perguntaId": 105, "opcaoId": 1052 },
+                { "perguntaId": 106, "opcaoId": 1061 },
+                { "perguntaId": 107, "opcaoId": 1071 }
+              ]
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Mesma resposta em pet com vacina atrasada (agrava)
+        meta:
+          id: req_triagem_modificador
+          sortKey: -900
+          description: >-
+            Rode antes "Registrar dose antiga na Nina" (pasta 4) para criar o atraso.
+            As MESMAS respostas do pet 1 dao ORIENTACAO; no pet 2 sobem para
+            POUCO_URGENTE, e observacoesClinicas explica o porque.
+        method: POST
+        url: "{{ _.base_url }}/triagem"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 2,
+              "queixaId": 1,
+              "respostas": [
+                { "perguntaId": 101, "opcaoId": 1012 },
+                { "perguntaId": 102, "opcaoId": 1022 },
+                { "perguntaId": 103, "opcaoId": 1031 },
+                { "perguntaId": 104, "opcaoId": 1041 },
+                { "perguntaId": 105, "opcaoId": 1051 },
+                { "perguntaId": 106, "opcaoId": 1061 },
+                { "perguntaId": 107, "opcaoId": 1071 }
+              ]
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Minhas triagens (tutor)
+        meta:
+          id: req_minhas_triagens
+          sortKey: -800
+        method: GET
+        url: "{{ _.base_url }}/triagem/minhas"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Fila de triagens graves (vet)
+        meta:
+          id: req_fila_triagem
+          sortKey: -700
+          description: >-
+            Emergencias e urgencias que ainda nao viraram consulta. So aqui a pontuacao
+            aparece, junto das observacoes clinicas.
+        method: GET
+        url: "{{ _.base_url }}/triagem/fila"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+  - name: 4. Carteira de vacinacao
+    meta:
+      id: fld_vacinacao
+      sortKey: -800
+      description: >-
+        O numero da dose e o vencimento da proxima sao calculados pela API a partir do
+        protocolo da vacina. O cliente nao envia nenhum dos dois.
+    children:
+      - name: Catalogo de vacinas para caes
+        meta:
+          id: req_catalogo
+          sortKey: -1000
+        method: GET
+        url: "{{ _.base_url }}/vacinacao/catalogo/CAO"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Aplicar 1a dose de V10 no Thor
+        meta:
+          id: req_dose1
+          sortKey: -900
+          description: Resposta traz proximaDose = data + 21 dias.
+        method: POST
+        url: "{{ _.base_url }}/vacinacao/pets/1/doses"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "vacinaId": 1,
+              "dataAplicacao": "2026-03-10",
+              "lote": "LT-2026-0834"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Antecipar a 2a dose (espera 409)
+        meta:
+          id: req_dose_antecipada
+          sortKey: -880
+        method: POST
+        url: "{{ _.base_url }}/vacinacao/pets/1/doses"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "vacinaId": 1,
+              "dataAplicacao": "2026-03-20"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Aplicar 2a dose no prazo
+        meta:
+          id: req_dose2
+          sortKey: -860
+        method: POST
+        url: "{{ _.base_url }}/vacinacao/pets/1/doses"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "vacinaId": 1,
+              "dataAplicacao": "2026-03-31"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Aplicar 3a dose - serie fecha e vira reforco anual
+        meta:
+          id: req_dose3
+          sortKey: -840
+          description: Repare que proximaDose salta para 2027, nao mais +21 dias.
+        method: POST
+        url: "{{ _.base_url }}/vacinacao/pets/1/doses"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "vacinaId": 1,
+              "dataAplicacao": "2026-04-21"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Vacina de gato no cao (espera 409)
+        meta:
+          id: req_especie_incompativel
+          sortKey: -820
+        method: POST
+        url: "{{ _.base_url }}/vacinacao/pets/1/doses"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "vacinaId": 5,
+              "dataAplicacao": "2026-05-01"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Registrar dose antiga na Nina (cria o atraso)
+        meta:
+          id: req_dose_antiga_nina
+          sortKey: -800
+          description: >-
+            Antirrabica felina com reforco anual aplicada em 2025. Isso deixa a Nina
+            atrasada e alimenta o modificador da triagem.
+        method: POST
+        url: "{{ _.base_url }}/vacinacao/pets/2/doses"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "vacinaId": 6,
+              "dataAplicacao": "2025-01-10"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Carteira do pet (tutor)
+        meta:
+          id: req_carteira
+          sortKey: -700
+        method: GET
+        url: "{{ _.base_url }}/vacinacao/pets/1/carteira"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Pendencias de vacinacao (vet)
+        meta:
+          id: req_pendencias_vacina
+          sortKey: -600
+          description: Lista que o aplicativo usa como origem do disparo de push.
+        method: GET
+        url: "{{ _.base_url }}/vacinacao/pendencias"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+  - name: 4b. Tratamento - encerramento
+    meta:
+      id: fld_tratamento
+      sortKey: -790
+    children:
+      - name: Tratamentos de um pet
+        meta:
+          id: req_tratamentos_pet
+          sortKey: -1000
+        method: GET
+        url: "{{ _.base_url }}/tratamentos/pet/1"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Encerrar tratamento concluido (vet)
+        meta:
+          id: req_encerrar_tratamento
+          sortKey: -900
+        method: PATCH
+        url: "{{ _.base_url }}/tratamentos/1/encerrar"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "motivo": "Quadro resolvido, sem necessidade de continuar"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Interromper tratamento (vet)
+        meta:
+          id: req_interromper_tratamento
+          sortKey: -800
+          description: Rode em um tratamento ainda EM_ANDAMENTO.
+        method: PATCH
+        url: "{{ _.base_url }}/tratamentos/2/interromper"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "motivo": "Suspeita de reacao adversa ao medicamento"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+  - name: 5. Agenda e consultas
+    meta:
+      id: fld_agenda
+      sortKey: -750
+    children:
+      - name: Veterinarios disponiveis (tutor)
+        meta:
+          id: req_vets_disponiveis
+          sortKey: -1000
+        method: GET
+        url: "{{ _.base_url }}/veterinarios/disponiveis"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Solicitar consulta sem triagem
+        meta:
+          id: req_solicitar_consulta
+          sortKey: -900
+          description: triagemId e opcional; sem ele a consulta nasce solta.
+        method: POST
+        url: "{{ _.base_url }}/consultas"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "veterinarioId": 2,
+              "dataHora": "2026-09-16T10:00:00",
+              "motivo": "Retorno da dermatologia"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Minhas consultas (tutor)
+        meta:
+          id: req_minhas_consultas
+          sortKey: -850
+        method: GET
+        url: "{{ _.base_url }}/consultas/minhas"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Agenda do dia (vet)
+        meta:
+          id: req_agenda_dia
+          sortKey: -800
+        method: GET
+        url: "{{ _.base_url }}/agenda?data=2026-09-15"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Registrar falta (vet)
+        meta:
+          id: req_falta
+          sortKey: -700
+        method: PATCH
+        url: "{{ _.base_url }}/consultas/2/falta"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Cancelar consulta
+        meta:
+          id: req_cancelar
+          sortKey: -600
+        method: PATCH
+        url: "{{ _.base_url }}/consultas/2/cancelar"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "motivo": "Imprevisto, vou remarcar"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+  - name: 6. Pets e cadastros
+    meta:
+      id: fld_pets
+      sortKey: -700
+      description: >-
+        Tutores e veterinarios sao somente leitura: tutor entra por /auth/registrar
+        com a conta do Firebase, e a equipe clinica vem da migration do Flyway.
+    children:
+      - name: Meus pets (tutor)
+        meta:
+          id: req_meus_pets
+          sortKey: -1000
+        method: GET
+        url: "{{ _.base_url }}/pets/meus"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Cadastrar pet (tutor)
+        meta:
+          id: req_cadastrar_pet
+          sortKey: -900
+          description: O dono nao vai no corpo; o pet e vinculado ao tutor do token.
+        method: POST
+        url: "{{ _.base_url }}/pets"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "nome": "Mel",
+              "descricao": "Filhote, primeira consulta",
+              "raca": "Border Collie",
+              "especie": "CAO",
+              "dataNascimento": "2026-02-10"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Atualizar pet
+        meta:
+          id: req_atualizar_pet
+          sortKey: -800
+        method: PUT
+        url: "{{ _.base_url }}/pets/1"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "nome": "Thor",
+              "descricao": "Cachorro docil, castrado, alergico a frango",
+              "raca": "Golden Retriever",
+              "especie": "CAO",
+              "dataNascimento": "2021-03-15"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Listar pets da clinica (vet)
+        meta:
+          id: req_listar_pets
+          sortKey: -700
+        method: GET
+        url: "{{ _.base_url }}/pets?page=0&size=10"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Meu perfil (tutor)
+        meta:
+          id: req_meu_perfil
+          sortKey: -600
+        method: GET
+        url: "{{ _.base_url }}/responsaveis/eu"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Listar tutores (vet)
+        meta:
+          id: req_listar_tutores
+          sortKey: -500
+        method: GET
+        url: "{{ _.base_url }}/responsaveis?page=0&size=10"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+  - name: 7. Testes de permissao e validacao
+    meta:
+      id: fld_permissoes
+      sortKey: -600
+      description: Requisicoes que devem falhar, para evidenciar as regras da API.
+    children:
+      - name: Tutor tentando abrir a fila da clinica (espera 403)
+        meta:
+          id: req_403_fila
+          sortKey: -1000
+        method: GET
+        url: "{{ _.base_url }}/triagem/fila"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Tutor tentando abrir pet de outro tutor (espera 403)
+        meta:
+          id: req_403_pet_alheio
+          sortKey: -950
+          description: O pet 3 pertence ao Joao Pereira, nao a Maria Silva.
+        method: GET
+        url: "{{ _.base_url }}/pets/3"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Triagem em pet de outro tutor (espera 403)
+        meta:
+          id: req_403_triagem_alheia
+          sortKey: -900
+        method: POST
+        url: "{{ _.base_url }}/triagem"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 3,
+              "queixaId": 1,
+              "respostas": [{ "perguntaId": 101, "opcaoId": 1011 }]
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Triagem incompleta (espera 409 listando o que faltou)
+        meta:
+          id: req_409_incompleta
+          sortKey: -850
+        method: POST
+        url: "{{ _.base_url }}/triagem"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "queixaId": 1,
+              "respostas": [{ "perguntaId": 101, "opcaoId": 1011 }]
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Opcao que nao pertence a pergunta (espera 409)
+        meta:
+          id: req_409_opcao_errada
+          sortKey: -800
+        method: POST
+        url: "{{ _.base_url }}/triagem"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "queixaId": 1,
+              "respostas": [{ "perguntaId": 101, "opcaoId": 1021 }]
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Reusar triagem ja encaminhada (espera 409, consulta nao e criada)
+        meta:
+          id: req_409_triagem_reusada
+          sortKey: -750
+          description: Rode depois de 2.5. Confira na agenda que nenhuma consulta nasceu.
+        method: POST
+        url: "{{ _.base_url }}/consultas"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "veterinarioId": 2,
+              "dataHora": "2026-09-17T09:00:00",
+              "motivo": "tentativa de reuso",
+              "triagemId": 2
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Agendar no mesmo horario do vet (espera 409)
+        meta:
+          id: req_409_colisao
+          sortKey: -700
+          description: Rode depois de 2.5, que ocupou 15/09 as 14:30.
+        method: POST
+        url: "{{ _.base_url }}/consultas"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 2,
+              "veterinarioId": 1,
+              "dataHora": "2026-09-15T14:45:00",
+              "motivo": "teste de colisao"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Agendar aos domingos (espera 409)
+        meta:
+          id: req_409_domingo
+          sortKey: -650
+        method: POST
+        url: "{{ _.base_url }}/consultas"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "veterinarioId": 1,
+              "dataHora": "2026-09-13T10:00:00",
+              "motivo": "teste de domingo"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Concluir consulta que nao esta em atendimento (espera 409)
+        meta:
+          id: req_409_transicao
+          sortKey: -600
+        method: PATCH
+        url: "{{ _.base_url }}/consultas/1/concluir"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "procedimento": "Teste de transicao invalida",
+              "localAtendimento": "Clinica Clyvo - Unidade Paulista"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Confirmar dose futura (espera 409)
+        meta:
+          id: req_409_dose_futura
+          sortKey: -550
+          description: Use o doseId da ultima dose do plano, que ainda nao chegou.
+        method: PATCH
+        url: "{{ _.base_url }}/tratamentos/doses/14/confirmar"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Confirmar a mesma dose duas vezes (espera 409)
+        meta:
+          id: req_409_dose_repetida
+          sortKey: -500
+          description: Rode depois de 2.13, com o mesmo doseId.
+        method: PATCH
+        url: "{{ _.base_url }}/tratamentos/doses/1/confirmar"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Prescrever medicamento ja em uso (espera 409)
+        meta:
+          id: req_409_medicamento_repetido
+          sortKey: -450
+        method: POST
+        url: "{{ _.base_url }}/tratamentos"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "medicamento": "amoxicilina 250mg",
+              "dosagem": "1 comprimido",
+              "intervaloHoras": 12,
+              "duracaoDias": 5,
+              "inicioEm": "2026-09-01T08:00:00"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Plano que estoura o limite de doses (espera 409)
+        meta:
+          id: req_409_plano_grande
+          sortKey: -400
+          description: 1 em 1 hora por 90 dias daria 2160 doses.
+        method: POST
+        url: "{{ _.base_url }}/tratamentos"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "medicamento": "Teste de limite",
+              "dosagem": "1 comprimido",
+              "intervaloHoras": 1,
+              "duracaoDias": 90,
+              "inicioEm": "2026-09-01T08:00:00"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_vet }}
+
+      - name: Tutor tentando prescrever (espera 403)
+        meta:
+          id: req_403_tutor_prescreve
+          sortKey: -350
+        method: POST
+        url: "{{ _.base_url }}/tratamentos"
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "petId": 1,
+              "medicamento": "Teste",
+              "dosagem": "1 comprimido",
+              "intervaloHoras": 12,
+              "duracaoDias": 5,
+              "inicioEm": "2026-09-01T08:00:00"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: ID nao numerico na rota (espera 400)
+        meta:
+          id: req_400_id_invalido
+          sortKey: -300
+        method: GET
+        url: "{{ _.base_url }}/pets/abc"
+        headers:
+          - name: Authorization
+            value: Bearer {{ _.token_tutor }}
+
+      - name: Requisicao sem token (espera 401)
+        meta:
+          id: req_401
+          sortKey: -250
+        method: GET
+        url: "{{ _.base_url }}/pets/meus"
