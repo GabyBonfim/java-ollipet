@@ -57,6 +57,7 @@ apos todo login sem efeito colateral.
 
 | Perfil | Pode |
 |---|---|
+| `ADMIN` | cadastrar e remover veterinarios, ver a equipe e os tutores |
 | `VETERINARIO` | ver a agenda e a fila de triagens graves, confirmar/iniciar/concluir consultas, aplicar vacinas, prescrever tratamentos e acompanhar a adesao, ver todos os pets |
 | `RESPONSAVEL` | ver **apenas os proprios pets**, fazer triagem, solicitar e cancelar consultas, consultar a carteira, confirmar as doses do tratamento |
 
@@ -68,9 +69,32 @@ A protecao acontece em tres camadas:
 3. **Por dono** (`PetService.buscarEntidadePermitida`) — um tutor que troque o id na URL
    recebe 403, porque a checagem e de posse do registro e nao so de perfil.
 
-Cadastro de tutores e de veterinarios nao e exposto pela API: tutores entram por
-`POST /api/v1/auth/registrar` a partir da conta do Firebase, e a equipe clinica vem da
-migration do Flyway. Os endpoints desses recursos sao somente de leitura.
+### Como cada perfil entra
+
+O tutor se cadastra sozinho: `POST /api/v1/auth/registrar` cria o cadastro a partir
+da conta do Firebase, bastando informar o CPF.
+
+**Veterinario nao se autocadastra.** Se a tela fosse publica, qualquer pessoa que
+baixasse o aplicativo poderia se declarar medica e abrir o prontuario de todos os
+pacientes. Entao a administracao cadastra a equipe em `POST /api/v1/veterinarios`, e
+o profissional apenas define a senha depois. O aplicativo confere em
+`GET /api/v1/veterinarios/e-da-equipe?email=` — a unica rota publica alem do login —
+se aquele e-mail pertence a clinica antes de criar a conta no Firebase.
+
+Quando um e-mail ja cadastrado aparece em `/auth/registrar`, a API grava o
+`firebase_uid` no cadastro existente em vez de criar um tutor. E assim que o
+veterinario e a administracao passam a ser reconhecidos pelos proprios perfis.
+
+Remover um veterinario **desativa** o cadastro em vez de apaga-lo: as consultas e os
+prontuarios que ele assinou continuam no historico, porque o registro clinico nao
+pode perder quem assinou o atendimento.
+
+| Metodo | Rota | Perfil |
+|---|---|---|
+| POST | `/api/v1/auth/registrar` | qualquer conta do Firebase |
+| GET | `/api/v1/veterinarios/e-da-equipe?email=` | publica |
+| POST | `/api/v1/veterinarios` | ADMIN |
+| DELETE | `/api/v1/veterinarios/{id}` | ADMIN |
 
 ---
 
@@ -113,7 +137,14 @@ relato do tutor anexado.
 | GET | `/api/v1/triagem/protocolos/{queixaId}` | ambos |
 | POST | `/api/v1/triagem` | RESPONSAVEL |
 | GET | `/api/v1/triagem/minhas` | RESPONSAVEL |
+| PUT | `/api/v1/triagem/{id}` | RESPONSAVEL |
+| DELETE | `/api/v1/triagem/{id}` | RESPONSAVEL |
 | GET | `/api/v1/triagem/fila` | VETERINARIO |
+
+O `PUT` reavalia a triagem do zero com novas respostas — serve para quando o tutor
+percebe que respondeu errado ou o quadro mudou. Nem ele nem o `DELETE` se aplicam a
+triagem que ja originou uma consulta: naquele ponto ela e a justificativa clinica do
+agendamento.
 
 Conteudo dos protocolos e contrato detalhado: `docs/protocolos-triagem.md`.
 
@@ -259,14 +290,17 @@ classificacoes diferentes** conforme o que a API sabe do pet.
 ## Tecnologias
 
 Java 21 · Spring Boot 4 · Spring Security (OAuth2 Resource Server) · Spring Data JPA ·
-Flyway · H2 · Swagger/OpenAPI · Maven
+Flyway · H2 · Swagger/OpenAPI · Maven · Docker
 
 ---
 
 ## Como executar
 
+O projeto exige **Java 21**. Se o `JAVA_HOME` apontar para outra versao, informe-o
+na execucao:
+
 ```bash
-./mvnw spring-boot:run
+JAVA_HOME="/caminho/para/jdk-21" ./mvnw spring-boot:run
 ```
 
 Quando aparecer `Started ChallengeClyvoApplication` no terminal, a API esta no ar.
@@ -274,16 +308,53 @@ Quando aparecer `Started ChallengeClyvoApplication` no terminal, a API esta no a
 | Recurso | Endereco |
 |---|---|
 | Swagger | http://localhost:8080/swagger-ui.html |
-| Console H2 | http://localhost:8080/h2-console (JDBC `jdbc:h2:mem:challenge_clyvo`, usuario `sa`, sem senha) |
+| Console H2 | http://localhost:8080/h2-console (JDBC `jdbc:h2:file:./data/challenge_clyvo`, usuario `sa`, sem senha) |
 
 Nao existe pagina em `/`: o projeto e apenas a API.
 
+O banco roda em arquivo na pasta `data/`, entao os dados sobrevivem ao reinicio.
+Para comecar do zero, apague essa pasta.
+
+### API publicada
+
+Tambem esta no ar, sem precisar rodar nada:
+
+```
+https://java-ollipet.onrender.com/swagger-ui.html
+```
+
+A hospedagem gratuita hiberna apos alguns minutos sem uso — a primeira chamada
+acorda o servico e pode levar perto de um minuto.
+
+### Variaveis de ambiente
+
+Todas tem valor padrao para o desenvolvimento local; sao usadas ao publicar.
+
+| Variavel | Para que serve |
+|---|---|
+| `PORT` | Porta do servidor. Plataformas como o Render injetam a sua e derrubam o servico se a aplicacao escutar em outra |
+| `DATABASE_URL` | Conexao JDBC. Em disco efemero vale usar `jdbc:h2:mem:ollipet;DB_CLOSE_DELAY=-1` |
+| `APP_CORS_ORIGENS` | Origens que podem chamar a API pelo navegador, separadas por virgula |
+| `FIREBASE_PROJECT_ID` | Projeto cujos ID tokens a API aceita. Vazio = so os tokens que ela mesma emite |
+| `APP_SECURITY_JWT_SECRET` | Chave HMAC dos tokens proprios |
+
+### Deploy com Docker
+
+O `Dockerfile` compila e empacota em duas etapas: a imagem final leva apenas o jar,
+sem Maven nem codigo-fonte.
+
+```bash
+docker build -t ollipet-api .
+docker run -p 8080:8080 ollipet-api
+```
+
 ### Contas de demonstracao
 
-Criadas pela migration `V4`. Senha de todas: `123456`.
+Criadas pelas migrations `V4` e `V8`. Senha de todas: `123456`.
 
 | Perfil | E-mail |
 |---|---|
+| Administracao | `admin@ollipet.com` |
 | Veterinaria | `camila.duarte@ollipet.com` |
 | Veterinario | `rafael.nunes@ollipet.com` |
 | Tutora | `maria.silva@email.com` |
@@ -309,6 +380,7 @@ derruba a aplicacao se divergirem.
 | `V5__criar_triagem.sql` | queixa, perguntas, opcoes, orientacoes, triagem e respostas |
 | `V6__inserir_protocolos_triagem.sql` | os 4 protocolos clinicos com 27 perguntas |
 | `V7__criar_tratamento.sql` | tratamento e o plano de doses |
+| `V8__criar_administrador.sql` | perfil de administracao da clinica |
 
 `Usuario` e uma entidade unica com heranca JOINED: `Responsavel` e `Veterinario` sao
 especializacoes dela. Isso permite um unico login para os dois perfis.
