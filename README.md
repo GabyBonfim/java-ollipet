@@ -7,9 +7,9 @@ Toda a superficie publica esta em `/api/v1/**`.
 
 **Vídeo de apresentação:** _([disponível no Google Drive](https://drive.google.com/drive/folders/1JKoLL68jtyRK_NjyG0xxe531YgfcYSK5))_
 
-**Repositório de Java:** _([disponível no Google Drive](https://github.com/GabyBonfim/java-ollipet.git))_
+**Repositório de Java:** _([repositório](https://github.com/GabyBonfim/java-ollipet.git))_
 
-**Repositório de Mobile (frontend):** _([disponível no Google Drive](https://github.com/FIAP-MOBILE/clyvo-challenge-ollipet.git))_
+**Repositório de Mobile (frontend):** _([repositório](https://github.com/FIAP-MOBILE/clyvo-challenge-ollipet.git))_
 
 ---
 
