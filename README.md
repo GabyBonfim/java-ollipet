@@ -3,7 +3,13 @@
 API REST em Spring Boot que atende o aplicativo mobile da clinica veterinaria Olli Pet.
 Toda a superficie publica esta em `/api/v1/**`.
 
-**Vídeo de apresentação:** _([disponível aqui](https://youtu.be/pbWaKn5euLs?is=j7YVBKej2STUbjgW))_
+**Vídeo de apresentação:** _([disponível no youtube](https://youtu.be/HUnnHWI9LkM?is=t82GYGfeoo5c6zyp))_
+
+**Vídeo de apresentação:** _([disponível no Google Drive](https://drive.google.com/drive/folders/1JKoLL68jtyRK_NjyG0xxe531YgfcYSK5))_
+
+**Repositório de Java:** _([disponível no Google Drive](https://github.com/GabyBonfim/java-ollipet.git))_
+
+**Repositório de Mobile (frontend):** _([disponível no Google Drive](https://github.com/FIAP-MOBILE/clyvo-challenge-ollipet.git))_
 
 ---
 
