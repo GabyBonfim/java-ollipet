@@ -3,6 +3,8 @@
 API REST em Spring Boot que atende o aplicativo mobile da clinica veterinaria Olli Pet.
 Toda a superficie publica esta em `/api/v1/**`.
 
+**Vídeo de apresentação:** _([disponível aqui](https://youtu.be/pbWaKn5euLs?is=j7YVBKej2STUbjgW))_
+
 ---
 
 ## Divisao de responsabilidades com o Firebase
